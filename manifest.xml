@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Manifest>
+  <ID>proffit_tool</ID>
+  <Name>Proffit Tool</Name>
+  <Author>Drey</Author>
+  <ModVersion>1.0</ModVersion>
+  <Description>Tool that shows proffit margins of each item when selling them</Description>
+  <GameVersions />
+  <Prerequisites />
+  <!-- Every DLL the game must load, relative to this folder. Nothing else in the folder is loaded. -->
+  <Assemblies>
+    <Assembly>proffit_tool.dll</Assembly>
+  </Assemblies>
+  <!-- What your code does beyond the game's API: files, network, process, dynamic-code, native, reflection-external.
+       Most mods need none. The game scans your DLL when a player activates the mod; an undeclared capability
+       refuses the activation. Check with the console command: mod-scan proffit_tool   (see ModdingGuide.md) -->
+  <Capabilities />
+</Manifest>
