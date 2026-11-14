@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using HarmonyLib;
 
 namespace proffit_tool
 {
@@ -12,6 +13,7 @@ namespace proffit_tool
     public class ModEntry : IMod
     {
         private const string BoughtPriceTag = "BOUGHT_PRICE_TAG";
+        private bool isEnabled;
 
         public static ModEntry Instance { get; private set; }
         public ModManifest Manifest { get; private set; }
@@ -27,6 +29,7 @@ namespace proffit_tool
 
         public void OnEnable()
         {
+            isEnabled = true;
             ModHook.OnShutterOpenedEarly += OnShutterOpened;
             ModHook.OnCreateTooltipLate += LogSellingItemProfit;
             Log.Log("Enabled.");
@@ -34,6 +37,7 @@ namespace proffit_tool
 
         public void OnDisable()
         {
+            isEnabled = false;
             ModHook.OnShutterOpenedEarly -= OnShutterOpened;
             ModHook.OnCreateTooltipLate -= LogSellingItemProfit;
             Log.Log("Disabled.");
@@ -46,24 +50,42 @@ namespace proffit_tool
 
         private void LogSellingItemProfit(RichTextBuilder tooltip, GameItem item)
         {
-            if (item == null || !item.IsInsideContainerPlacedForSelling())
+            if (item == null)
             {
                 return;
             }
 
-            if (!item.IsTag(BoughtPriceTag))
+            if (!item.IsInsideContainerPlacedForSelling())
             {
-                Log.Warning($"Cannot calculate profit for {item.name}: no recorded acquisition price.");
                 return;
             }
 
-            long acquisitionPrice = item.GetTagReadonly(BoughtPriceTag).GetInt();
+            LogItemProfit(item);
+        }
+
+        internal void LogNegotiationCounterProfit(GameItem item)
+        {
+            if (isEnabled && item != null)
+            {
+                LogItemProfit(item);
+            }
+        }
+
+        private void LogItemProfit(GameItem item)
+        {
+            bool usedBasePrice = !item.IsTag(BoughtPriceTag);
+            long acquisitionPrice = usedBasePrice
+                ? item.GetBaseValue()
+                : item.GetTagReadonly(BoughtPriceTag).GetInt();
             long salePrice = item.GetNegociatedValue();
             long profit = salePrice - acquisitionPrice;
+            string priceSource = usedBasePrice ? "base price fallback" : "purchase price";
 
             if (salePrice == 0)
             {
-                Log.Log($"Sale value for {item.name} is zero; profit is {FormatMoney(profit)} and margin is unavailable.");
+                Log.Log(
+                    $"Sale value for {item.name} is zero; profit is {FormatMoney(profit)} using " +
+                    $"{priceSource} {FormatMoney(acquisitionPrice)}, and margin is unavailable.");
                 return;
             }
 
@@ -71,12 +93,24 @@ namespace proffit_tool
             Log.Log(
                 $"Sale margin for {item.name}: profit {FormatMoney(profit)} " +
                 $"({marginPercent.ToString("F1", CultureInfo.InvariantCulture)}%); " +
-                $"sale {FormatMoney(salePrice)}, acquisition {FormatMoney(acquisitionPrice)}.");
+                $"sale {FormatMoney(salePrice)}, {priceSource} {FormatMoney(acquisitionPrice)}.");
         }
 
         private static string FormatMoney(long value)
         {
             return value.ToString("N0", CultureInfo.InvariantCulture);
+        }
+    }
+
+    [HarmonyPatch(typeof(NegociationUIManager), nameof(NegociationUIManager.UpdateUI), new[] { typeof(GameItem) })]
+    internal static class NegotiationCounterPlacementPatch
+    {
+        private static void Postfix(GameItem __0, GameItem ___currentNegociatedItem)
+        {
+            if (ReferenceEquals(__0, ___currentNegociatedItem))
+            {
+                ModEntry.Instance?.LogNegotiationCounterProfit(__0);
+            }
         }
     }
 }
